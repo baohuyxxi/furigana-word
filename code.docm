@@ -1,0 +1,561 @@
+Option Explicit
+
+
+' ============================================================
+' MAIN
+' ============================================================
+
+Sub testInsertPhoneticGuide()
+
+    Call insertPhoneticGuide(Selection.Range)
+
+End Sub
+
+
+' ============================================================
+' KI?M TRA CÓ B? QUA KHÔNG
+' ============================================================
+
+Function Skip(str As String) As Boolean
+
+    Skip = Not IsKanjiChar(str)
+
+End Function
+
+
+' ============================================================
+' MAIN PROCESS
+' ============================================================
+
+Sub insertPhoneticGuide(r As Word.Range)
+
+    Dim cleanRange As Word.Range
+
+
+    ' ========================================================
+    ' BU?C 1: RESET PHONETIC GUIDE CU
+    ' ========================================================
+
+    On Error Resume Next
+
+    r.Fields.Unlink
+
+    On Error GoTo 0
+
+
+    ' ========================================================
+    ' BU?C 2: CLEAN TEXT
+    ' ========================================================
+
+    Set cleanRange = r.Duplicate
+
+    With cleanRange.Find
+
+        .ClearFormatting
+        .Replacement.ClearFormatting
+
+        .Forward = True
+        .Wrap = wdFindStop
+
+        ' ----------------------------------------------------
+        ' Clean Yu Gothic
+        ' ----------------------------------------------------
+
+        .Text = "ont:Yu Gothic"" \* hp"
+        .Replacement.Text = ""
+
+        .Execute Replace:=wdReplaceAll
+
+
+        .Text = "ont:Yu Gothic” ?* hp"
+        .Replacement.Text = ""
+
+        .Execute Replace:=wdReplaceAll
+
+    End With
+
+
+    ' ========================================================
+    ' BU?C 3: X? LÝ KANJI
+    ' ========================================================
+
+    Call insertPhoneticGuideOneByOne(r)
+
+End Sub
+
+
+' ============================================================
+' QUÉT KANJI VÀ THÊM PHONETIC GUIDE
+' ============================================================
+
+Sub insertPhoneticGuideOneByOne(r As Word.Range)
+
+    Dim d As Word.Dialog
+
+    Dim r1 As Word.Range
+    Dim r2 As Word.Range
+
+    Dim lng As Long
+    Dim totalLen As Long
+
+    Dim t As String
+
+    Dim startPos As Long
+    Dim endPos As Long
+
+    Dim processedCount As Long
+
+
+    ' ========================================================
+    ' TANG T?C WORD
+    ' ========================================================
+
+    Application.ScreenUpdating = False
+
+
+    On Error GoTo CleanUp
+
+
+    ' ========================================================
+    ' PHONETIC GUIDE DIALOG
+    ' ========================================================
+
+    Set d = Word.Dialogs(wdDialogPhoneticGuide)
+
+
+    ' ========================================================
+    ' COPY RANGE
+    ' ========================================================
+
+    Set r1 = r.Duplicate
+
+    r1.TextRetrievalMode.IncludeFieldCodes = False
+
+
+    ' ========================================================
+    ' L?Y TEXT 1 L?N
+    ' ========================================================
+
+    t = r1.Text
+
+    totalLen = Len(t)
+
+
+    ' ========================================================
+    ' QUÉT T? CU?I LÊN
+    ' ========================================================
+
+    lng = totalLen
+
+
+    Do While lng >= 1
+
+
+        ' ====================================================
+        ' BU?C QUAN TR?NG:
+        '
+        ' KI?M TRA STRING TRU?C
+        '
+        ' Không t?o Word.Range n?u:
+        ' - ti?ng Vi?t
+        ' - Hiragana
+        ' - Katakana
+        ' - Space
+        ' - d?u câu
+        ' ====================================================
+
+        If Not IsKanjiChar(Mid$(t, lng, 1)) Then
+
+            lng = lng - 1
+
+
+        Else
+
+            ' =================================================
+            ' G?P KANJI
+            ' =================================================
+
+            endPos = lng
+            startPos = lng
+
+
+            ' =================================================
+            ' GOM CÁC KANJI LIÊN TI?P
+            '
+            ' Ví d?:
+            '
+            ' ?????
+            '
+            ' s? du?c x? lý thành 1 block
+            ' =================================================
+
+            Do While startPos > 1
+
+                If IsKanjiChar(Mid$(t, startPos - 1, 1)) Then
+
+                    startPos = startPos - 1
+
+                Else
+
+                    Exit Do
+
+                End If
+
+            Loop
+
+
+            ' =================================================
+            ' CH? BÂY GI? M?I T?O WORD RANGE
+            ' =================================================
+
+            Set r2 = r1.Duplicate
+
+
+            ' GI? CÁCH XÁC Ð?NH POSITION
+            ' GI?NG CODE G?C C?A B?N
+
+            r2.Start = r1.Characters(startPos).Start
+
+            r2.End = r1.Characters(endPos).End
+
+
+            ' =================================================
+            ' X? LÝ N?U CHUA CÓ FIELD
+            ' =================================================
+
+            If r2.Fields.Count = 0 Then
+
+                r2.Select
+
+
+                On Error Resume Next
+
+                d.Show 1
+
+                On Error GoTo CleanUp
+
+
+                processedCount = processedCount + 1
+
+
+                ' =============================================
+                ' C? 10 BLOCK THÌ NHU?NG CPU CHO WORD
+                '
+                ' Giúp Word ít b? Not Responding
+                ' =============================================
+
+                If processedCount Mod 10 = 0 Then
+
+                    Application.StatusBar = _
+                        "Ðang x? lý Kanji: " & processedCount
+
+                    DoEvents
+
+                End If
+
+            End If
+
+
+            ' =================================================
+            ' QUAN TR?NG:
+            '
+            ' NH?Y QUA C? BLOCK KANJI ÐÃ X? LÝ
+            '
+            ' Ví d?:
+            '
+            ' ?????
+            '
+            ' Không x? lý l?i:
+            '
+            ' ????
+            ' ???
+            ' ??
+            ' ?
+            ' =================================================
+
+            lng = startPos - 1
+
+        End If
+
+
+    Loop
+
+
+CleanUp:
+
+    ' ========================================================
+    ' RESTORE WORD
+    ' ========================================================
+
+    Application.ScreenUpdating = True
+
+    Application.StatusBar = False
+
+
+    Set r2 = Nothing
+    Set r1 = Nothing
+    Set d = Nothing
+
+End Sub
+
+
+' ============================================================
+' KI?M TRA KÝ T? CÓ PH?I KANJI KHÔNG
+' ============================================================
+
+Function IsKanjiChar(c As String) As Boolean
+
+    Dim code As Long
+
+
+    If Len(c) = 0 Then
+
+        IsKanjiChar = False
+
+        Exit Function
+
+    End If
+
+
+    code = AscW(c)
+
+
+    ' AscW có th? tr? v? s? âm
+
+    If code < 0 Then
+
+        code = code + 65536
+
+    End If
+
+
+    ' ========================================================
+    ' CJK UNIFIED IDEOGRAPHS
+    '
+    ' U+4E00 ? U+9FFF
+    ' ========================================================
+
+    IsKanjiChar = _
+        (code >= 19968 And code <= 40959)
+
+End Function
+
+Sub testClearPhoneticGuide()
+    Call ClearAllPhoneticGuides(Selection.Range)
+End Sub
+
+Sub ClearAllPhoneticGuides(r As Word.Range)
+    Dim i As Long
+    Dim singleChar As Word.Range
+    
+    ' Các bi?n l?u thông s? Font ??c l?p
+    Dim fName As String
+    Dim fSize As Single
+    Dim fColor As Long
+    Dim fBold As Long
+    Dim fItalic As Long
+    
+    ' T?t c?p nh?t màn hình ?? t?i ?u t?c ?? và tránh gi?t màn hình
+    Application.ScreenUpdating = False
+    
+    ' Duy?t ng??c t? cu?i vùng ch?n v? ??u theo t?ng ký t?
+    For i = r.Characters.Count To 1 Step -1
+        Set singleChar = r.Characters(i)
+        
+        ' Ch? x? lý nh?ng ký t? ?ang có Furigana (?ang ch?a Field)
+        If singleChar.Fields.Count > 0 Then
+            
+            ' 1. "Ch?p" và l?u c?u hình Font g?c vào các bi?n ??c l?p
+            fName = singleChar.Font.Name
+            fSize = singleChar.Font.Size
+            fColor = singleChar.Font.Color
+            fBold = singleChar.Font.Bold
+            fItalic = singleChar.Font.Italic
+            
+            ' 2. G?i API h? th?ng ?? xóa s?ch Furigana
+            singleChar.phoneticguide Text:="", Alignment:=wdPhoneticGuideAlignmentCenter
+            
+            ' 3. Ép Word áp l?i chính xác thông s? ??nh d?ng c? sang ch? tr?n m?i
+            With singleChar.Font
+                .Name = fName
+                .Size = fSize
+                .Color = fColor
+                .Bold = fBold
+                .Italic = fItalic
+            End With
+            
+        End If
+    Next i
+    
+    Application.ScreenUpdating = True
+    MsgBox "?ã dùng API h? th?ng reset Furigana và b?o toàn nguyên v?n format bài h?c!", vbInformation, "Hoàn t?t"
+End Sub
+Sub FillBlank()
+    ' G?i ham va truy?n vung v?n b?n ?ang ???c to ?en
+    Call FillBlankParenthesesDynamic(Selection.Range)
+End Sub
+
+Sub FillBlankParenthesesDynamic(r As Word.Range)
+    Dim p As Paragraph
+    Dim targetRange As Word.Range
+    Dim rightMarginPos As Single
+    
+    ' 1. L?y v? tri l? ph?i c?a trang hi?n t?i (??i t? Points sang tuy ch?nh t? ??ng)
+    ' ?o?n nay giup xac ??nh ?i?m d?ng c?a d?u ch?m sat l? ph?i v?n b?n
+    rightMarginPos = r.PageSetup.PageWidth - r.PageSetup.RightMargin - r.PageSetup.LeftMargin
+
+    ' 2. Duy?t qua t?ng ?o?n v?n trong vung ch?n
+    For Each p In r.Paragraphs
+        If p.Range.Text <> vbCr And Len(Trim(p.Range.Text)) > 1 Then
+            
+            ' Thi?t l?p Tab Stop cho rieng dong ch?m (??nh d?ng d?u ch?m keo dai ??n l? ph?i)
+            ' Cai ??t nay ch? ap d?ng t?i v? tri chen ?? khong lam h?ng Tab s?n co c?a cau h?i
+            p.TabStops.Add Position:=rightMarginPos, _
+                           Alignment:=wdAlignTabRight, _
+                           Leader:=wdTabLeaderDots
+            
+            ' Xac ??nh ?i?m cu?i c?a cau h?i (ngay tr??c ky t? ng?t ?o?n ^p)
+            Set targetRange = p.Range
+            targetRange.Collapse wdCollapseEnd
+            targetRange.MoveEnd wdCharacter, -1
+            
+            ' CHEN T? ??NG: vbVerticalTab (Shift+Enter) n?i v?i vbTab (Ky t? Tab)
+            ' Ky t? Tab nay s? t? ??ng bi?n thanh hang d?u ch?m dai ch?m l? ph?i
+            targetRange.InsertAfter vbVerticalTab & vbTab
+            
+        End If
+    Next p
+End Sub
+
+Sub testInsertPhoneticGuideV0()
+Call insertPhoneticGuideV0(Selection.Range)
+End Sub
+
+Function SkipV0(str As String) As Boolean
+Dim i As Long
+Dim code As Long
+SkipV0 = False
+Debug.Print (str)
+
+
+For i = 1 To Len(str)
+    code = AscW(Mid(str, i, 1))
+    
+    ' N?U LÀ KANJI (n?m trong d?i t? 19968 d?n 40959)
+    If code >= 19968 And code <= 40959 Then
+        SkipV0 = False
+        Exit Function
+    End If
+    
+    ' 1. Né d?u ngo?c và ký t? d?c bi?t
+    If code = -248 Or code = -247 Or code = 123 Or code = 125 Then
+        SkipV0 = True
+        Exit Function
+    End If
+    
+    ' 2. Né ch? s? (thu?ng và full-width)
+    If (code >= 48 And code <= 57) Or (code >= 65296 And code <= 65305) Then
+        SkipV0 = True
+        Exit Function
+    End If
+    
+    ' 3. Né hoàn toàn ch? Hiragana (12353 d?n 12447)
+    If code >= 12353 And code <= 12447 Then
+        SkipV0 = True
+        Exit Function
+    End If
+    
+    ' 4. Né ch? Katakana (12448 d?n 12543)
+    If code >= 12448 And code <= 12543 Then
+        SkipV0 = True
+        Exit Function
+    End If
+    
+    ' 5. Né ch? cái ti?ng Anh d?ng Full-width
+    If code >= 65313 And code <= 65370 Then
+        SkipV0 = True
+        Exit Function
+    End If
+    
+    ' 6. Né luôn ch? cái ti?ng Anh thu?ng
+    If (code >= 65 And code <= 90) Or (code >= 97 And code <= 122) Then
+        SkipV0 = True
+        Exit Function
+    End If
+Next i
+
+TiepTucQuet:
+End Function
+
+Sub insertPhoneticGuideV0(r As Word.Range)
+Dim d As Word.Dialog
+Dim singleWord As Word.Range
+Dim i As Long
+
+' =====================================================================
+' BU?C 1 & 2: RESET VÀ LÀM S?CH B?NG UNLINK + FIND REPLACE
+' =====================================================================
+r.Fields.Unlink
+
+Dim cleanRange As Word.Range
+Set cleanRange = r.Duplicate
+
+With cleanRange.Find
+    .ClearFormatting
+    .Replacement.ClearFormatting
+    .Forward = True
+    .Wrap = wdFindStop
+    
+    .Text = "ont:Yu Gothic"" \* hp"
+    .Replacement.Text = ""
+    .Execute Replace:=wdReplaceAll
+    
+    .Text = "ont:Yu Gothic” ?* hp"
+    .Replacement.Text = ""
+    .Execute Replace:=wdReplaceAll
+End With
+
+' Chuy?n ti?p sang hàm quét t?ng ký t?
+Call insertPhoneticGuideOneByOneV0(r)
+
+
+End Sub
+
+Sub insertPhoneticGuideOneByOneV0(r As Word.Range)
+Dim d As Word.Dialog
+Dim lng As Long
+Dim lngChars As Long
+Dim r1 As Word.Range
+Dim r2 As Word.Range
+
+
+On Error Resume Next
+
+Set d = Word.Dialogs(wdDialogPhoneticGuide)
+Set r1 = r.Duplicate
+
+r1.TextRetrievalMode.IncludeFieldCodes = False
+
+For lng = Len(r1.Text) To 0 Step -1
+    Set r2 = r1.Characters(lng)
+    
+    ' Ch? x? lý KANJI th?c s?
+    If r2.Fields.Count = 0 And SkipV0(r2.Text) = False Then
+        r2.Select
+        d.Show 1
+        
+        If Err.Number = 6031 Then
+            ' Err.Clear
+        Else
+            ' On Error GoTo 0
+        End If
+    End If
+Next
+
+Set r2 = Nothing
+Set r1 = Nothing
+Set d = Nothing
+
+
+End Sub
+
